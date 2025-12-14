@@ -1,17 +1,16 @@
 import { useEffect, useState, useMemo } from 'react';
-import { Wallet } from 'lucide-react';
+import { Wallet, ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase, Expense, Category } from './lib/supabase';
 import { DonutChart } from './components/DonutChart';
 import { ExpenseForm } from './components/ExpenseForm';
 import { ExpenseList } from './components/ExpenseList';
-import { DateFilter, DateRange } from './components/DateFilter';
 import { Statistics } from './components/Statistics';
 
 function App() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dateRange, setDateRange] = useState<DateRange>('month');
+  const [currentMonth, setCurrentMonth] = useState(new Date());
 
   useEffect(() => {
     loadData();
@@ -88,36 +87,20 @@ function App() {
     }
   };
 
-  const filteredExpenses = useMemo(() => {
-    const now = new Date();
-    const startOfWeek = new Date(now);
-    startOfWeek.setDate(now.getDate() - now.getDay());
-    startOfWeek.setHours(0, 0, 0, 0);
-
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const startOfYear = new Date(now.getFullYear(), 0, 1);
-
-    return expenses.filter((expense) => {
-      const expenseDate = new Date(expense.date);
-
-      switch (dateRange) {
-        case 'week':
-          return expenseDate >= startOfWeek;
-        case 'month':
-          return expenseDate >= startOfMonth;
-        case 'year':
-          return expenseDate >= startOfYear;
-        case 'all':
-        default:
-          return true;
-      }
+  const monthExpenses = useMemo(() => {
+    return expenses.filter((exp) => {
+      const expDate = new Date(exp.date);
+      return (
+        expDate.getMonth() === currentMonth.getMonth() &&
+        expDate.getFullYear() === currentMonth.getFullYear()
+      );
     });
-  }, [expenses, dateRange]);
+  }, [expenses, currentMonth]);
 
   const chartData = useMemo(() => {
     const categoryTotals = new Map<string, { amount: number; color: string; name: string }>();
 
-    filteredExpenses.forEach((expense) => {
+    monthExpenses.forEach((expense) => {
       const category = categories.find((c) => c.id === expense.category_id);
       if (!category) return;
 
@@ -141,7 +124,15 @@ function App() {
         percentage: 0,
       }))
       .sort((a, b) => b.amount - a.amount);
-  }, [filteredExpenses, categories]);
+  }, [monthExpenses, categories]);
+
+  const prevMonth = () => {
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1));
+  };
+
+  const nextMonth = () => {
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1));
+  };
 
   if (loading) {
     return (
@@ -158,23 +149,37 @@ function App() {
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
       <div className="max-w-7xl mx-auto px-4 py-8">
         <div className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
+          <div className="flex items-center gap-3 mb-4">
             <div className="bg-blue-600 p-3 rounded-xl">
               <Wallet className="text-white" size={28} />
             </div>
             <div>
               <h1 className="text-3xl font-bold text-gray-800">Expense Tracker</h1>
-              <p className="text-gray-600">Manage your finances with ease</p>
+              <p className="text-gray-600">Track spending month by month</p>
             </div>
           </div>
         </div>
 
-        <div className="mb-6">
-          <DateFilter selected={dateRange} onSelect={setDateRange} />
+        <div className="mb-6 bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex items-center justify-between">
+          <button
+            onClick={prevMonth}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <ChevronLeft size={20} />
+          </button>
+          <h2 className="text-2xl font-semibold text-gray-800 min-w-48 text-center">
+            {currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+          </h2>
+          <button
+            onClick={nextMonth}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <ChevronRight size={20} />
+          </button>
         </div>
 
         <div className="mb-6">
-          <Statistics expenses={filteredExpenses} />
+          <Statistics expenses={monthExpenses} />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
@@ -183,13 +188,13 @@ function App() {
           </div>
 
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-800 mb-4">Expense Distribution</h2>
+            <h2 className="text-lg font-semibold text-gray-800 mb-4">This Month's Breakdown</h2>
             <DonutChart data={chartData} />
           </div>
         </div>
 
         <ExpenseList
-          expenses={filteredExpenses}
+          expenses={monthExpenses}
           categories={categories}
           onUpdate={handleUpdateExpense}
           onDelete={handleDeleteExpense}
